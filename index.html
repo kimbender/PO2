@@ -55,9 +55,9 @@
   .panel-title{color:var(--text-dim);font-size:10px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase}
   .dot{width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 8px var(--accent2);animation:blink 2.5s ease-in-out infinite}
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-  #sat-channel{width:90px;background:rgba(8,14,31,0.8);border-left:1px solid var(--edge-border);border-right:1px solid var(--dash-border);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+  #sat-channel{width:90px;background:rgba(20,55,120,0.5);border-left:1px solid var(--edge-border);border-right:1px solid var(--dash-border);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
   #sat-channel .sat-label{font-size:9px;color:var(--text-dim);letter-spacing:2px;text-align:center;padding:6px;border-bottom:1px solid var(--border);width:100%}
-  #sat-canvas{flex:1;width:100%}
+  #sat-canvas{flex:1;width:100% }
   #map-canvas,#dash-map-canvas{width:100%;height:50vh;flex-shrink:0;display:block}
   #map-canvas{cursor:crosshair}
   #audio-section{border-top:1px solid var(--edge-border);padding:12px 14px;flex:1;overflow:hidden;background:rgba(9,15,32,0.8);display:flex;flex-direction:column}
@@ -537,6 +537,8 @@ async function analyseFullFile(){
   STATE.timeline = [];
 
   const nWindows = Math.max(1, Math.floor((samples.length - winSamples) / hopSamples) + 1);
+  const WIN_SEC = 3.5;  // 2.88s — one window duration
+  let lastDetTSec = -Infinity;      // cooldown: one detection display per window
 
   for(let i=0; i<nWindows; i++){
     const startSamp = i * hopSamples;
@@ -559,7 +561,10 @@ async function analyseFullFile(){
     if(detected){
       STATE.detections++;
       document.getElementById('stat-det').textContent = STATE.detections;
-      scheduleDetectionDisplay(score, tSec);
+      if(tSec - lastDetTSec >= WIN_SEC){
+        lastDetTSec = tSec;
+        scheduleDetectionDisplay(score, tSec);
+      }
     }
 
     // Yield to UI every 5 windows
@@ -921,8 +926,13 @@ function clearPlayTimers(){
 function schedulePlaybackDetections(startOffset){
   clearPlayTimers();
   const WIN_CENTER = 23040 / 8000 / 2;  // 1.44 s — fire at middle of window
+  const DETECTION_COOLDOWN_S = 23040 / 8000;  // 2.88s — one window duration
+  let lastScheduledT = -Infinity;
   STATE.timeline.forEach(({t,score,detected})=>{
     if(!detected) return;
+    // Cooldown: skip if a detection was already scheduled within DETECTION_COOLDOWN_S
+    if(t - lastScheduledT < DETECTION_COOLDOWN_S) return;
+    lastScheduledT = t;
     // Trigger animation at the centre of the analysis window so the ring
     // fires when the audio listener is most likely hearing the event,
     // not at the start of the 2.88 s window before the bomb sound.
